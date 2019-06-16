@@ -139,9 +139,7 @@ def VisualizeFilter(model):
     w_grid = torchvision.utils.make_grid(w,8, normalize = True, scale_each = True)
     w_grid = w_grid.permute(2, 1, 0)
     plt.imshow(w_grid.detach().cpu().numpy())    
-    return w_grid;
-  
-def 
+    return w_grid
   
 model = ConvNet(input_size, hidden_size, num_classes, norm_layer=norm_layer).to(device)
 model.apply(weights_init)
