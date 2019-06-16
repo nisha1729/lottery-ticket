@@ -1,0 +1,251 @@
+import torch
+import torch.nn as nn
+import torchvision
+import torchvision.transforms as transforms
+import numpy as np
+import matplotlib.pyplot as plt
+from inferno.extensions.layers.reshape import Flatten
+from builtins import range
+from math import sqrt, ceil
+  
+  
+def weights_init(m):
+    if type(m) == nn.Linear:
+        m.weight.data.normal_(0.0, 1e-3)
+        m.bias.data.fill_(0.)
+
+def update_lr(optimizer, lr):
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+#--------------------------------
+# Device configuration
+#--------------------------------
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print('Using device: %s'%device)
+
+#--------------------------------
+# Hyper-parameters
+#--------------------------------
+input_size = 3
+num_classes = 10
+hidden_size = [64,128,256,512]
+fc_size = 256
+num_epochs = 50
+batch_size = 200
+learning_rate = 2e-3
+learning_rate_decay = 0.95
+reg=0.001
+num_training= 49000
+num_validation =1000
+norm_layer = None
+
+
+#-------------------------------------------------
+# Load the CIFAR-10 dataset
+#-------------------------------------------------
+data_aug_transforms = []
+
+norm_transform = transforms.Compose(data_aug_transforms+[transforms.ToTensor(),
+                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                     ])
+test_transform = transforms.Compose([transforms.ToTensor(),
+                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                     ])
+cifar_dataset = torchvision.datasets.CIFAR10(root='datasets/',
+                                           train=True,
+                                           transform=norm_transform,
+                                           download=True)
+
+test_dataset = torchvision.datasets.CIFAR10(root='datasets/',
+                                          train=False,
+                                          transform=test_transform
+                                          )
+#-------------------------------------------------
+# Prepare the training and validation splits
+#-------------------------------------------------
+mask = list(range(num_training))
+train_dataset = torch.utils.data.Subset(cifar_dataset, mask)
+mask = list(range(num_training, num_training + num_validation))
+val_dataset = torch.utils.data.Subset(cifar_dataset, mask)
+
+#-------------------------------------------------
+# Data loader
+#-------------------------------------------------
+train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
+                                           batch_size=batch_size,
+                                           shuffle=True)
+
+val_loader = torch.utils.data.DataLoader(dataset=val_dataset,
+                                           batch_size=batch_size,
+                                           shuffle=False)
+
+test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
+                                          batch_size=batch_size,
+                                          shuffle=False)
+
+
+#-------------------------------------------------
+# Convolutional neural network
+#-------------------------------------------------
+class ConvNet(nn.Module):
+    def __init__(self, input_size, hidden_layers, num_classes, norm_layer=None):
+        super(ConvNet, self).__init__()
+        #######################################################################################################
+        # The Conv-2, Conv-4, and Conv-6 architectures are variants of the VGG (Simonyan & Zisserman,
+        # 2014) network architecture scaled down for the CIFAR10 (Krizhevsky & Hinton, 2009) dataset. Like
+        # VGG, the networks consist of a series of modules. Each module has two layers of 3x3 convolutional
+        # filters followed by a maxpool layer with stride 2. After all of the modules are two fully-connected
+        # layers of size 256 followed by an output layer of size 10; in VGG, the fully-connected layers are of
+        # size 4096 and the output layer is of size 1000. Like VGG, the first module has 64 convolutions in
+        # each layer, the second has 128, the third has 256, etc. The Conv-2, Conv-4, and Conv-6 architectures
+        # have 1, 2, and 3 modules, respectively.
+        #######################################################################################################
+        layers = []
+        
+        # 1 module for Conv-2
+        layers.append(nn.Conv2d(input_size, 64 , kernel_size = 3, stride = 1, padding = 1))
+        layers.append(nn.BatchNorm2d(64))
+        layers.append(nn.ReLU())
+        layers.append(nn.Conv2d(64, 64 , kernel_size = 3, stride = 1, padding = 1))
+        layers.append(nn.BatchNorm2d(64))
+        layers.append(nn.ReLU())
+        layers.append(nn.MaxPool2d(kernel_size = 2, stride = 2, padding = 0))
+        
+        # Fully Connected Layers
+        layers.append(Flatten())
+        
+        layers.append(nn.Linear(16384, fc_size))
+        layers.append(nn.Linear(fc_size, fc_size))
+        
+        # Output Layer
+        layers.append(nn.Linear(fc_size, num_classes))
+        
+        self.layers = nn.Sequential(*layers)
+        
+
+    def forward(self, x):
+        out = self.layers(x)
+        return out
+      
+def PrintModelSize(model, disp=True):
+    model_sz = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print("Number of trainable parameters = ", model_sz)
+    return model_sz
+
+  
+def VisualizeFilter(model):
+    w = model.layers[0].weight
+    w_grid = torchvision.utils.make_grid(w,8, normalize = True, scale_each = True)
+    w_grid = w_grid.permute(2, 1, 0)
+    plt.imshow(w_grid.detach().cpu().numpy())    
+    return w_grid;
+  
+def 
+  
+model = ConvNet(input_size, hidden_size, num_classes, norm_layer=norm_layer).to(device)
+model.apply(weights_init)
+
+
+# Print the model
+print(model)
+
+
+# Print model size
+PrintModelSize(model)
+
+# Loss and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=reg)
+loss_history = []
+
+# Train the model
+lr = learning_rate
+max_val_acc = 0
+train_accuracy = []
+val_accuracy = []
+total_step = len(train_loader)
+for epoch in range(num_epochs):
+    for i, (images, labels) in enumerate(train_loader):
+      
+        # Move tensors to the configured device
+        images = images.to(device)
+        labels = labels.to(device)
+
+        # Forward pass
+        outputs = model(images)
+        
+        loss = criterion(outputs, labels)
+
+        # Backward and optimize
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        loss_history.append(loss.item())
+        if (i+1) % 100 == 0:
+            print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
+                   .format(epoch+1, num_epochs, i+1, total_step, loss.item()))
+
+    with torch.no_grad():
+        correct = 0
+        total = 0
+        for images, labels in train_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+        train_accuracy.append(100*correct/total)
+            
+    # Code to update the lr
+    lr *= learning_rate_decay
+    update_lr(optimizer, lr)
+    model.eval()
+    with torch.no_grad():
+        
+        correct = 0
+        total = 0
+        for images, labels in val_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+        val_accuracy.append(100*correct/total)
+
+        print('Validataion accuracy is: {} %'.format(100 * correct / total))
+
+    model.train()
+    
+plt.plot(loss_history)
+
+# Test the model
+# In test phase, we don't need to compute gradients (for memory efficiency)
+model.eval()
+
+# TODO: Early Stopping
+
+with torch.no_grad():
+    
+    correct = 0
+    total = 0
+    for images, labels in test_loader:
+        images = images.to(device)
+        labels = labels.to(device)
+        outputs = model(images)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+        if total == 1000:
+            break
+
+    print('Accuracy of the network on the {} test images: {} %'.format(total, 100 * correct / total))
+
+plt.plot(val_accuracy, label = "Validation")
+plt.plot(train_accuracy, label = "Train")
+plt.show()
+
+# Save the model checkpoint
+torch.save(model.state_dict(), 'model.ckpt')
