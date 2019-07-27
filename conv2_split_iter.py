@@ -22,7 +22,7 @@ print('Using device: %s' % device)
 input_size = 3
 num_classes = 10
 fc_size = 256
-num_epochs = 10  # 50
+num_epochs = 1  # 50
 batch_size = 200    # 200
 learning_rate = 0.0002   # 2e-3
 learning_rate_decay = 0.0001   # 0.95
@@ -31,7 +31,7 @@ num_training = 49000
 num_validation = 1000
 norm_layer = None
 prune_percent = 20
-prune_iter = 20
+prune_iter = 1
 validation_split = .02      # Percentage (*100) of data to be put into validation set
 data_split = .1             # Percentage (*100) of data to be split into two sets
 
@@ -80,10 +80,15 @@ test_sampler2 = SubsetRandomSampler(test_indices2)
 
 train_loader1 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=train_sampler1)
 val_loader1 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=valid_sampler1)
-test_loader1 = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler1)
-train_loader2 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=train_sampler2)
-val_loader2 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=valid_sampler2)
-test_loader2 = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler2)
+# test_loader1 = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler1)
+# train_loader2 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=train_sampler2)
+# val_loader2 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=valid_sampler2)
+# test_loader2 = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler2)
+
+# Full dataset
+train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+val_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=False)
+test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
 # -------------------------------------------------
 # Convolutional neural network
@@ -269,22 +274,23 @@ if __name__ == "__main__":
 
     # Train and test on <data_split> % of the dataset
     iter_history.append(train(model, train_loader1, val_loader1))
-    test_accuracies_samedata.append(test(model, test_loader1))
-    test_accuracies_newdata.append(test(model, test_loader1))
+    test_accuracies_samedata.append(test(model, test_loader))
+    test_accuracies_newdata.append(test(model, test_loader))
     initial_mask = get_initial_mask(model)
     percent_weights_remaining.append(get_weights_remaining(initial_mask))
     new_mask = prune(prune_percent, model, initial_mask)
 
-    # For comparison, prune and train on remaining data
+    # Prune and train on remaining data
     for i in range(1, prune_iter):
         try:
+            # Reset weights
             initial_model = torch.load("model_initial.ckpt")
             model.load_state_dict(initial_model)
             model.mask = new_mask
 
             # Train on full dataset
-            iter_history.append(train(model, train_loader2, val_loader2))
-            test_accuracies_newdata.append(test(model, test_loader2))
+            iter_history.append(train(model, train_loader, val_loader))
+            test_accuracies_newdata.append(test(model, test_loader))
             percent_weights_remaining.append(get_weights_remaining(new_mask))
 
             # Reset, train on subset
@@ -292,7 +298,7 @@ if __name__ == "__main__":
             model.load_state_dict(initial_model)
             model.mask = new_mask
             train(model, train_loader1, val_loader1)
-            test_accuracies_samedata.append(test(model, test_loader1))
+            test_accuracies_samedata.append(test(model, test_loader))
 
             # Prune on subset iteratively
             new_mask = prune(prune_percent, model, new_mask)
@@ -300,30 +306,30 @@ if __name__ == "__main__":
         except IndexError:
             break
 
-    print("Accuracies on 90% dataset")
+    print("Accuracies on full dataset")
     print(test_accuracies_newdata)
     print("Accuracies on 10% dataset")
     print(test_accuracies_samedata)
     print("Number of Iterations")
     print(iter_history)
-    #
-    # f1 = plt.figure(1)
-    # plt.plot(percent_weights_remaining[:len(test_accuracies_newdata)].reverse(), test_accuracies_newdata.reverse(), 'r*--', label= "Accuracy on 90% dataset")
-    # plt.plot(percent_weights_remaining[:len(test_accuracies_samedata)].reverse(), test_accuracies_samedata.reverse(), 'o--', label= "Accuracy on 10% dataset")
-    # plt.xlabel("Percentage of Weights Remaining")
-    # plt.ylabel("Early Stopping Test Accuracy")
-    # plt.title('Winning ticket from %d percent of dataset' % (data_split*100))
-    # plt.grid()
-    # plt.legend()
-    # # f1.gca().invert_xaxis()
-    # # plt.savefig("prune_acc_split_iter_num.png")
-    #
-    #
-    # f2 = plt.figure(2)
-    # plt.plot(percent_weights_remaining[:len(test_accuracies_newdata)].reverse(), iter_history.reverse(), 'b*--')
-    # plt.xlabel("Percentage of Weights Remaining")
-    # plt.ylabel("Early Stopping Iteration")
-    # plt.title('Winning ticket from %d percent of dataset' % (data_split*100))
-    # plt.grid()
-    # # f2.gca().invert_xaxis()
-    # plt.savefig("prune_acc_split_iter.png")
+
+    f1 = plt.figure(1)
+    plt.plot(percent_weights_remaining[:len(test_accuracies_newdata)].reverse(), test_accuracies_newdata.reverse(), 'r*--', label= "Accuracy on 90% dataset")
+    plt.xlabel("Percentage of Weights Remaining")
+    plt.ylabel("Early Stopping Test Accuracy")
+    plt.title('Winning ticket from %d percent of dataset' % (data_split*100))
+    plt.grid()
+    plt.legend()
+    f1.gca().invert_xaxis()
+    plt.savefig("split_acc.png")
+
+    plt.clf()
+
+    f2 = plt.figure(2)
+    plt.plot(percent_weights_remaining[:len(test_accuracies_newdata)].reverse(), iter_history.reverse(), 'b*--')
+    plt.xlabel("Percentage of Weights Remaining")
+    plt.ylabel("Early Stopping Iteration")
+    plt.title('Winning ticket from %d percent of dataset' % (data_split*100))
+    plt.grid()
+    f2.gca().invert_xaxis()
+    plt.savefig("split_iter.png")
