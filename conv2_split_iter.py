@@ -31,7 +31,7 @@ num_training = 49000
 num_validation = 1000
 norm_layer = None
 prune_percent = 20
-prune_iter = 20
+prune_iter = 15
 validation_split = .02      # Percentage (*100) of data to be put into validation set
 data_split = .1             # Percentage (*100) of data to be split into two sets
 
@@ -80,10 +80,21 @@ test_sampler2 = SubsetRandomSampler(test_indices2)
 
 train_loader1 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=train_sampler1)
 val_loader1 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=valid_sampler1)
-test_loader1 = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler1)
-train_loader2 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=train_sampler2)
-val_loader2 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=valid_sampler2)
-test_loader2 = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler2)
+# test_loader1 = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler1)
+# train_loader2 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=train_sampler2)
+# val_loader2 = torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, sampler=valid_sampler2)
+# test_loader2 = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler2)
+
+# Prepare the training and validation splits
+dataset_mask = list(range(num_training))
+train_dataset = torch.utils.data.Subset(cifar_dataset, dataset_mask)
+dataset_mask = list(range(num_training, num_training + num_validation))
+val_dataset = torch.utils.data.Subset(cifar_dataset, dataset_mask)
+
+# Data loader
+train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+val_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=False)
+test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
 # -------------------------------------------------
 # Convolutional neural network
@@ -258,8 +269,8 @@ def get_weights_remaining(mask_dict):
 
 if __name__ == "__main__":
     percent_weights_remaining = []
-    test_accuracies_samedata = []
-    test_accuracies_newdata = []
+    test_acc_split = []
+    test_acc_full = []
     iter_history = []
     iter_base = []
 
@@ -268,9 +279,9 @@ if __name__ == "__main__":
     model.apply(weights_init)
     torch.save(model.state_dict(), 'model_initial.ckpt')
 
-    # Find initial training accuracy for full model on reamining dataset
-    iter_base.append(train(model, train_loader2, val_loader2))
-    test_accuracies_newdata.append(test(model, test_loader2))
+    # Find initial training accuracy for unpruned model on full dataset
+    iter_base.append(train(model, train_loader, val_loader))
+    test_acc_full.append(test(model, test_loader))
 
     # Reset model
     initial_model = torch.load("model_initial.ckpt")
@@ -278,12 +289,12 @@ if __name__ == "__main__":
 
     # Train and test on <data_split> % of the dataset
     iter_history.append(train(model, train_loader1, val_loader1))
-    test_accuracies_samedata.append(test(model, test_loader1))
+    test_acc_split.append(test(model, test_loader))
     initial_mask = get_initial_mask(model)
     percent_weights_remaining.append(get_weights_remaining(initial_mask))
     new_mask = prune(prune_percent, model, initial_mask)
 
-    # For comparison, prune and train on remaining data
+    # Prune and train on full data
     for i in range(1, prune_iter):
         try:
             # Reset weights
@@ -292,18 +303,18 @@ if __name__ == "__main__":
             model.mask = new_mask
 
             # Train on full dataset
-            iter_base.append(train(model, train_loader2, val_loader2))
-            test_accuracies_newdata.append(test(model, test_loader2))
+            iter_base.append(train(model, train_loader, val_loader))
+            test_acc_full.append(test(model, test_loader))
             percent_weights_remaining.append(get_weights_remaining(new_mask))
-            print("New ", test_accuracies_newdata)
+            print("New ", test_acc_full)
 
             # Reset, train on subset
             initial_model = torch.load("model_initial.ckpt")
             model.load_state_dict(initial_model)
             model.mask = new_mask
             iter_history.append(train(model, train_loader1, val_loader1))
-            test_accuracies_samedata.append(test(model, test_loader1))
-            print("Same ", test_accuracies_samedata)
+            test_acc_split.append(test(model, test_loader))
+            print("Same ", test_acc_split)
 
             # Prune on subset iteratively
             new_mask = prune(prune_percent, model, new_mask)
@@ -314,32 +325,35 @@ if __name__ == "__main__":
         except IndexError:
             break
 
-    print("Accuracies on 90% dataset")
-    print(test_accuracies_newdata)
+    print("Percentage of weights remaining")
+    print(percent_weights_remaining)
+    print("Accuracies on full dataset")
+    print(test_acc_full)
     print("Accuracies on 10% dataset")
-    print(test_accuracies_samedata)
-    print("Number of Iterations")
+    print(test_acc_split)
+    print("Number of Iterations to find winning ticket")
     print(iter_history)
-    print("Number of Ierations for 90% dataset")
+    print("Number of Iterations for full dataset")
     print(iter_base)
 
-    # f1 = plt.figure(1)
-    # plt.plot(percent_weights_remaining[:len(test_accuracies_newdata)].reverse(), test_accuracies_newdata.reverse(), 'r*--', label= "Accuracy on 90% dataset")
-    # plt.plot(percent_weights_remaining[:len(test_accuracies_samedata)].reverse(), test_accuracies_samedata.reverse(), 'o--', label= "Accuracy on 10% dataset")
-    # plt.xlabel("Percentage of Weights Remaining")
-    # plt.ylabel("Early Stopping Test Accuracy")
-    # plt.title('Winning ticket from %d percent of dataset' % (data_split*100))
-    # plt.grid()
-    # plt.legend()
-    # # f1.gca().invert_xaxis()
-    # # plt.savefig("prune_acc_split_iter_num.png")
-    #
-    #
-    # f2 = plt.figure(2)
-    # plt.plot(percent_weights_remaining[:len(test_accuracies_newdata)].reverse(), iter_history.reverse(), 'b*--')
-    # plt.xlabel("Percentage of Weights Remaining")
-    # plt.ylabel("Early Stopping Iteration")
-    # plt.title('Winning ticket from %d percent of dataset' % (data_split*100))
-    # plt.grid()
-    # # f2.gca().invert_xaxis()
-    # plt.savefig("prune_acc_split_iter.png")
+    f1 = plt.figure(1)
+    plt.plot(percent_weights_remaining[:len(test_acc_full)], test_acc_full, 'r*--', label= "Accuracy on full dataset")
+    plt.plot(percent_weights_remaining[:len(test_acc_split)], test_acc_split, 'o--', label= "Accuracy on 10% dataset")
+    plt.xlabel("Percentage of Weights Remaining")
+    plt.ylabel("Early Stopping Test Accuracy")
+    plt.title('Winning ticket from %d percent of dataset' % (data_split*100))
+    plt.grid()
+    plt.legend()
+    f1.gca().invert_xaxis()
+    plt.savefig("acc_split.png")
+
+    plt.clf()
+
+    f2 = plt.figure(2)
+    plt.plot(percent_weights_remaining[:len(test_acc_full)], iter_history, 'b*--')
+    plt.xlabel("Percentage of Weights Remaining")
+    plt.ylabel("Early Stopping Iteration")
+    plt.title('Winning ticket from %d percent of dataset' % (data_split*100))
+    plt.grid()
+    f2.gca().invert_xaxis()
+    plt.savefig("iter_split.png")
