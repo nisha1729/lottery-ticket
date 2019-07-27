@@ -11,8 +11,8 @@ from pylab import *
 input_size = 3
 num_classes = 10
 fc_size = 256
-num_epochs = 20  # 50
-batch_size = 200    # 200
+num_epochs = 160  # 50
+batch_size = 60    # 200
 learning_rate = 0.0002   # 2e-3
 learning_rate_decay = 0.0001   # 0.95
 reg = 0.001
@@ -20,7 +20,7 @@ num_training = 49000
 num_validation = 1000
 norm_layer = None
 prune_percent = 20
-prune_iter = 20
+prune_iter = 15
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -240,7 +240,6 @@ plt.xlabel("Percentage of Weights Remaining")
 plt.ylabel("Early Stopping Test Accuracy")
 plt.title('Base Experiment')
 plt.grid()
-plt.legend()
 f1.gca().invert_xaxis()
 plt.savefig("acc_base.png")
 

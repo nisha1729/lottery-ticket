@@ -149,14 +149,14 @@ def get_initial_mask(model):
     return mask
 
 
-def train(model, train_loader, val_loader):
+def train(model, train_load, val_load):
     max_val_acc = 0
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=reg)
     model.train()
     for epoch in tqdm(range(num_epochs)):
-        for i, (images, labels) in enumerate(train_loader):
+        for i, (images, labels) in enumerate(train_load):
 
             # Move tensors to the configured device
             images = images.to(device)
@@ -177,7 +177,7 @@ def train(model, train_loader, val_loader):
         # lr *= learning_rate_decay
         # update_lr(optimizer, lr)
 
-        val_acc = validate(model, val_loader)
+        val_acc = validate(model, val_load)
 
         # Saving best model
         if (val_acc > max_val_acc):
@@ -206,7 +206,7 @@ def validate(model, val_data):
     return val_acc
 
 
-def test(model, test_loader):
+def test(model, test_load):
     # TESTING
     model.eval()
 
@@ -218,7 +218,7 @@ def test(model, test_loader):
     with torch.no_grad():
         correct = 0
         total = 0
-        for images, labels in test_loader:
+        for images, labels in test_load:
             images = images.to(device)
             labels = labels.to(device)
             outputs = model(images)
@@ -300,6 +300,8 @@ if __name__ == "__main__":
             # Reset weights
             initial_model = torch.load("model_initial.ckpt")
             model.load_state_dict(initial_model)
+
+            # Update mask
             model.mask = new_mask
 
             # Train on full dataset
@@ -316,7 +318,7 @@ if __name__ == "__main__":
             test_acc_split.append(test(model, test_loader))
             print("Same ", test_acc_split)
 
-            # Prune on subset iteratively
+            # Prune on subset
             new_mask = prune(prune_percent, model, new_mask)
 
             print("Itr Base ", iter_base)
