@@ -15,6 +15,7 @@ test_dataset = torchvision.datasets.CIFAR10(root='datasets/', train=False, trans
 def data_base():
     num_training = 49000
     num_validation = 1000
+    batch_size = 200  # 200
     # Prepare the training and validation splits
     dataset_mask = list(range(num_training))
     train_dataset = torch.utils.data.Subset(cifar_dataset, dataset_mask)

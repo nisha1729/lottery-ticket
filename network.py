@@ -14,7 +14,6 @@ input_size = 3
 num_classes = 10
 fc_size = 256
 num_epochs = 20  # 50
-batch_size = 200    # 200
 learning_rate = 0.0002   # 2e-3
 learning_rate_decay = 0.0001   # 0.95
 reg = 0.001
@@ -66,15 +65,14 @@ def get_initial_mask(model):
     return mask
 
 
-def train(model):
+def train(model, train_load, val_load):
     max_val_acc = 0
-    iter_num = 0
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=reg)
     model.train()
     for epoch in tqdm(range(num_epochs)):
-        for i, (images, labels) in enumerate(train_loader):
+        for i, (images, labels) in enumerate(train_load):
 
             # Move tensors to the configured device
             images = images.to(device)
@@ -95,25 +93,25 @@ def train(model):
         # lr *= learning_rate_decay
         # update_lr(optimizer, lr)
 
-        val_acc = validate(model)
+        val_acc = validate(model, val_load)
 
         # Saving best model
         if (val_acc > max_val_acc):
             # print("Saving the model...")
             torch.save(model.state_dict(), 'model_early.ckpt')
             max_val_acc = val_acc
-            iter_num = i + 1 + epoch*num_training/batch_size
+            iter_num = (1 + epoch)*len(train_load)
     return iter_num
 
 
-def validate(model):
+def validate(model, val_data):
     model.eval()
 
     # Checking validation accuracy
     with torch.no_grad():
         correct = 0
         total = 0
-        for images, labels in val_loader:
+        for images, labels in val_data:
             images = images.to(device)
             labels = labels.to(device)
             outputs = model(images)
@@ -124,7 +122,7 @@ def validate(model):
     return val_acc
 
 
-def test(model):
+def test(model, test_load):
     # TESTING
     model.eval()
 
@@ -136,7 +134,7 @@ def test(model):
     with torch.no_grad():
         correct = 0
         total = 0
-        for images, labels in test_loader:
+        for images, labels in test_load:
             images = images.to(device)
             labels = labels.to(device)
             outputs = model(images)
