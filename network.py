@@ -10,27 +10,25 @@ import dataset
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-input_size = 3
+input_size = 28*28
+hidden_size = [50, 50]
 num_classes = 10
-fc_size = 256
-num_epochs = 20  # 50
-learning_rate = 0.0002   # 2e-3
-learning_rate_decay = 0.0001   # 0.95
+num_epochs = 20
+learning_rate = 0.001
+learning_rate_decay = 0.95
 reg = 0.001
 norm_layer = None
 
 
-class ConvNet(nn.Module):
+class FCnet(nn.Module):
     def __init__(self, mask):
-        super(ConvNet, self).__init__()
+        super(FCnet, self).__init__()
         layers = []
-        layers.append(nn.Conv2d(input_size, 64, kernel_size=3))
-        layers.append(nn.Conv2d(64, 64, kernel_size=3))
-        layers.append(nn.MaxPool2d(kernel_size=3, stride=2))
-        layers.append(Flatten())
-        layers.append(nn.Linear(64*13*13, fc_size))
-        layers.append(nn.Linear(fc_size, fc_size))
-        layers.append(nn.Linear(fc_size, num_classes))
+        layers.append(nn.Linear(input_size, hidden_size[0]))
+        layers.append(nn.ReLU())
+        layers.append(nn.Linear(hidden_size[0], hidden_size[1]))
+        layers.append(nn.ReLU())
+        layers.append(nn.Linear(hidden_size[1], num_classes))
         self.layers = nn.Sequential(*layers)
 
         self.mask = mask
@@ -40,7 +38,7 @@ class ConvNet(nn.Module):
             for name, param in self.named_parameters():
                 if 'weight' in name:
                     param.data = param.data * self.mask[name].float()
-        out = self.layers(x)
+        out = self.layers(x.view(dataset.batch_size, input_size))
         return out
 
 
@@ -92,11 +90,13 @@ def train(model, train_load, val_load):
         # Code to update the lr
         # lr *= learning_rate_decay
         # update_lr(optimizer, lr)
+            if i%100 == 0:
+                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}' .format(epoch+1, num_epochs, i+1, len(train_load), loss.item()))
 
         val_acc = validate(model, val_load)
 
         # Saving best model
-        if (val_acc > max_val_acc):
+        if val_acc > max_val_acc:
             # print("Saving the model...")
             torch.save(model.state_dict(), 'model_early.ckpt')
             max_val_acc = val_acc

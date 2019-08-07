@@ -7,22 +7,23 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 prune_percent = 20
 prune_iter = 15
 
+
 def base_experiment():
     percent_weights_remaining = []
     test_accuracies = []
     iter_history = []
 
-    model = network.ConvNet(mask=None).to(device)
+    model = network.FCnet(mask=None).to(device)
     model.apply(network.weights_init)
     torch.save(model.state_dict(), 'model_initial.ckpt')
 
-    train_loader, val_loader, test_loader = dataset.data_base()
+    train_loader, val_loader, test_loader = dataset.data_base_mnist()
 
     iter_history.append(network.train(model, train_loader, val_loader))
 
     test_accuracies.append(network.test(model, test_loader))
     initial_mask = network.get_initial_mask(model)
-    percent_weights_remaining.append(get_weights_remaining(initial_mask))
+    percent_weights_remaining.append(network.get_weights_remaining(initial_mask))
 
     new_mask = network.prune(prune_percent, model, initial_mask)
 
