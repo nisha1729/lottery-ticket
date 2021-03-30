@@ -1,0 +1,13 @@
+input_size = 3
+num_classes = 10
+fc_size = 256
+num_epochs = 160  # 50
+batch_size = 60    # 200
+learning_rate = 0.0002   # 2e-3
+learning_rate_decay = 0.0001   # 0.95
+reg = 0.001
+num_training = 49000
+num_validation = 1000
+norm_layer = None
+prune_percent = 20
+prune_iter = 15
